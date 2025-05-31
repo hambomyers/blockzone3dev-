@@ -239,6 +239,13 @@ export class InputController {
         this.stopTouchHold();
         
         const touchDuration = Date.now() - this.touchStartTime;
+        const state = this.getState();
+        
+        // Check if we're in menu or game over - ANY tap should start
+        if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
+            this.onAction({ type: 'START_GAME' });
+            return;
+        }
         
         // Quick tap for rotate
         if (!this.isSwiping && touchDuration < 200) {
@@ -364,10 +371,10 @@ export class InputController {
     isActionAllowed(action) {
         const state = this.getState();
         
-        // Menu/Game Over - only allow start keys
+        // Menu/Game Over - allow start actions
         if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
             return action.type === 'SPACE' || action.type === 'ENTER' || action.type === 'ESCAPE' ||
-                   action.type === 'ROTATE' || action.type === 'HARD_DROP'; // Allow tap/double-tap to start
+                   action.type === 'START_GAME'; // Added START_GAME
         }
         
         // Paused - only allow unpause
