@@ -1,13 +1,14 @@
 /**
- * input-controller.js - State-aware input handling
+ * input-controller.js - State-aware input handling with full touch support
  * 
  * Features:
  * - DAS (Delayed Auto Shift) for smooth piece movement
  * - ARR (Auto Repeat Rate) for continuous input
  * - State awareness - blocks invalid inputs based on game phase
  * - Professional input handling like modern Tetris games
+ * - Full touch/mobile support with swipe and tap detection
  * 
- * CLEANED: No audio handling - that's done in the game engine
+ * UPDATED: Complete touch controls for mobile devices
  */
 
 export class InputController {
@@ -35,13 +36,59 @@ export class InputController {
         // Track last successful move position to prevent ghosting
         this.lastValidPosition = null;
         
+        // Touch tracking
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.touchStartTime = 0;
+        this.isSwiping = false;
+        this.touchHoldTimer = null;
+        
         this.setupListeners();
     }
     
     setupListeners() {
+        // Keyboard listeners
         document.addEventListener('keydown', (e) => this.onKeyDown(e));
         document.addEventListener('keyup', (e) => this.onKeyUp(e));
+        
+        // Touch listeners
+        document.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+        document.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+        document.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+        
+        // On-screen button listeners
+        const touchButtons = document.querySelectorAll('.touch-btn');
+        touchButtons.forEach(btn => {
+            // Use touchstart for immediate response
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.onTouchButtonPress(btn.dataset.action);
+            });
+            
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.onTouchButtonRelease(btn.dataset.action);
+            });
+            
+            // Also support mouse for debugging
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.onTouchButtonPress(btn.dataset.action);
+            });
+            
+            btn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                this.onTouchButtonRelease(btn.dataset.action);
+            });
+        });
+        
+        // Detect if device has touch
+        if ('ontouchstart' in window) {
+            document.body.classList.add('touch-device');
+        }
     }
+    
+    // ============ KEYBOARD HANDLING ============
     
     onKeyDown(e) {
         // Ignore held keys
@@ -109,18 +156,218 @@ export class InputController {
             'KeyC': { type: 'HOLD' },
             'ShiftRight': { type: 'HOLD' },
             'Escape': { type: 'ESCAPE' },
-            'Enter': { type: 'ENTER' }
+            'Enter': { type: 'ENTER' },
+            'KeyP': { type: 'ESCAPE' } // P for pause
         };
         
         return mapping[keyCode];
     }
+    
+    // ============ TOUCH HANDLING ============
+    
+    onTouchStart(e) {
+        // Prevent default to stop scrolling
+        e.preventDefault();
+        
+        const touch = e.touches[0];
+        this.touchStartX = touch.clientX;
+        this.touchStartY = touch.clientY;
+        this.touchStartTime = Date.now();
+        this.isSwiping = false;
+        
+        // Start hold timer for continuous down movement
+        this.touchHoldTimer = setTimeout(() => {
+            if (!this.isSwiping) {
+                this.startTouchHold();
+            }
+        }, 200);
+    }
+    
+    onTouchMove(e) {
+        e.preventDefault();
+        
+        if (!this.touchStartX || !this.touchStartY) return;
+        
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - this.touchStartX;
+        const deltaY = touch.clientY - this.touchStartY;
+        
+        // Detect if this is a swipe
+        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+            this.isSwiping = true;
+            clearTimeout(this.touchHoldTimer);
+        }
+        
+        // Threshold for swipe detection
+        const threshold = 30;
+        
+        // Horizontal swipe for movement
+        if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > Math.abs(deltaY)) {
+            const action = { type: 'MOVE', dx: deltaX > 0 ? 1 : -1, dy: 0 };
+            if (this.isActionAllowed(action)) {
+                this.onAction(action);
+                // Reset start position for continuous swiping
+                this.touchStartX = touch.clientX;
+            }
+        }
+        
+        // Vertical swipe
+        if (Math.abs(deltaY) > threshold && Math.abs(deltaY) > Math.abs(deltaX)) {
+            if (deltaY > 0) {
+                // Swipe down - soft drop
+                const action = { type: 'MOVE', dx: 0, dy: 1 };
+                if (this.isActionAllowed(action)) {
+                    this.onAction(action);
+                    this.touchStartY = touch.clientY;
+                }
+            } else {
+                // Swipe up - rotate
+                const action = { type: 'ROTATE', direction: 1 };
+                if (this.isActionAllowed(action)) {
+                    this.onAction(action);
+                    this.touchStartY = touch.clientY;
+                    this.touchStartX = touch.clientX;
+                }
+            }
+        }
+    }
+    
+    onTouchEnd(e) {
+        e.preventDefault();
+        
+        clearTimeout(this.touchHoldTimer);
+        this.stopTouchHold();
+        
+        const touchDuration = Date.now() - this.touchStartTime;
+        
+        // Quick tap for rotate
+        if (!this.isSwiping && touchDuration < 200) {
+            const action = { type: 'ROTATE', direction: 1 };
+            if (this.isActionAllowed(action)) {
+                this.onAction(action);
+            }
+        }
+        
+        // Double tap detection for hard drop
+        if (!this.isSwiping && this.lastTapTime && (Date.now() - this.lastTapTime) < 300) {
+            const action = { type: 'HARD_DROP' };
+            if (this.isActionAllowed(action)) {
+                this.onAction(action);
+            }
+            this.lastTapTime = null;
+        } else {
+            this.lastTapTime = Date.now();
+        }
+        
+        // Reset touch tracking
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.isSwiping = false;
+    }
+    
+    // Touch hold for continuous down movement
+    startTouchHold() {
+        this.touchHoldInterval = setInterval(() => {
+            const action = { type: 'MOVE', dx: 0, dy: 1 };
+            if (this.isActionAllowed(action)) {
+                this.onAction(action);
+            }
+        }, 50);
+    }
+    
+    stopTouchHold() {
+        if (this.touchHoldInterval) {
+            clearInterval(this.touchHoldInterval);
+            this.touchHoldInterval = null;
+        }
+    }
+    
+    // ============ ON-SCREEN BUTTON HANDLING ============
+    
+    onTouchButtonPress(actionType) {
+        let action = null;
+        
+        switch (actionType) {
+            case 'left':
+                action = { type: 'MOVE', dx: -1, dy: 0 };
+                break;
+            case 'right':
+                action = { type: 'MOVE', dx: 1, dy: 0 };
+                break;
+            case 'down':
+                action = { type: 'MOVE', dx: 0, dy: 1 };
+                break;
+            case 'rotate':
+                action = { type: 'ROTATE', direction: 1 };
+                break;
+            case 'drop':
+                action = { type: 'HARD_DROP' };
+                break;
+            case 'hold':
+                action = { type: 'HOLD' };
+                break;
+        }
+        
+        if (action && this.isActionAllowed(action)) {
+            this.onAction(action);
+            
+            // Start auto-repeat for movement buttons
+            if (action.type === 'MOVE') {
+                this.startButtonRepeat(actionType, action);
+            }
+        }
+    }
+    
+    onTouchButtonRelease(actionType) {
+        this.stopButtonRepeat(actionType);
+    }
+    
+    startButtonRepeat(buttonType, action) {
+        // Similar to keyboard auto-repeat
+        const repeatKey = `btn-${buttonType}`;
+        
+        // DAS: Wait before starting repeat
+        const dasTimer = setTimeout(() => {
+            // ARR: Repeat at fixed rate
+            const arrTimer = setInterval(() => {
+                if (this.isActionAllowed(action)) {
+                    this.onAction(action);
+                }
+            }, this.ARR_RATE);
+            
+            this.arr.set(repeatKey, arrTimer);
+        }, this.DAS_DELAY);
+        
+        this.das.set(repeatKey, dasTimer);
+    }
+    
+    stopButtonRepeat(buttonType) {
+        const repeatKey = `btn-${buttonType}`;
+        
+        // Clear DAS timer
+        const dasTimer = this.das.get(repeatKey);
+        if (dasTimer) {
+            clearTimeout(dasTimer);
+            this.das.delete(repeatKey);
+        }
+        
+        // Clear ARR timer
+        const arrTimer = this.arr.get(repeatKey);
+        if (arrTimer) {
+            clearInterval(arrTimer);
+            this.arr.delete(repeatKey);
+        }
+    }
+    
+    // ============ COMMON METHODS ============
     
     isActionAllowed(action) {
         const state = this.getState();
         
         // Menu/Game Over - only allow start keys
         if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
-            return action.type === 'SPACE' || action.type === 'ENTER' || action.type === 'ESCAPE';
+            return action.type === 'SPACE' || action.type === 'ENTER' || action.type === 'ESCAPE' ||
+                   action.type === 'ROTATE' || action.type === 'HARD_DROP'; // Allow tap/double-tap to start
         }
         
         // Paused - only allow unpause
@@ -223,6 +470,9 @@ export class InputController {
         // Remove event listeners
         document.removeEventListener('keydown', this.onKeyDown);
         document.removeEventListener('keyup', this.onKeyUp);
+        document.removeEventListener('touchstart', this.onTouchStart);
+        document.removeEventListener('touchmove', this.onTouchMove);
+        document.removeEventListener('touchend', this.onTouchEnd);
         
         // Clear all timers
         this.das.forEach(timer => clearTimeout(timer));
@@ -231,5 +481,9 @@ export class InputController {
         this.das.clear();
         this.arr.clear();
         this.keys.clear();
+        
+        // Clear touch timers
+        clearTimeout(this.touchHoldTimer);
+        clearInterval(this.touchHoldInterval);
     }
 }
