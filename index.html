@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Neon Drop - A competitive Tetris game">
+    <title>Neon Drop</title>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Google Fonts for Bungee -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Game Canvases -->
+    <canvas id="bg"></canvas>
+    <canvas id="game"></canvas>
+    
+    <!-- UI Container for future settings/menus -->
+    <div id="ui-container"></div>
+    
+    <!-- 
+    ===== BLOCKCHAIN INTEGRATION (TEMPORARILY DISABLED) =====
+    
+    The game is designed to integrate with Sonic Labs blockchain for:
+    - Cryptographically verified high scores
+    - NFT-based player profiles
+    - Tournament participation
+    - On-chain leaderboards
+    
+    To enable blockchain features:
+    1. Uncomment the ethers.js script below
+    2. Uncomment the blockchain import in main.js
+    3. Remove the stub blockchain object in main.js
+    4. Uncomment blockchain calls in main.js (search for "TODO: Re-enable blockchain")
+    
+    Required for blockchain:
+    - ethers.js library (Web3 provider)
+    - MetaMask or compatible wallet
+    - Connection to Sonic Labs network
+    -->
+    
+    <!-- Blockchain Library (commented out for now) -->
+    <!-- <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script> -->
+    
+    <!-- Main Game Script -->
+    <script type="module" src="main.js"></script>
+    
+    <!-- 
+    ===== GAME FEATURES =====
+    
+    Core Gameplay:
+    - Classic Tetris mechanics with modern feel
+    - Special pieces: FLOAT (can move up), PLUS, U, DOT
+    - Smooth animations and particle effects
+    - Professional scoring system
+    
+    Controls:
+    - Arrow Keys / WASD: Move pieces
+    - Z/X or Shift/Ctrl: Rotate
+    - Space: Hard drop (instant drop)
+    - C or Right Shift: Hold piece
+    - P or ESC: Pause
+    - Enter/Space: Start game
+    
+    Secret Features:
+    - Hold S+T+A+R on menu: Enable starfield background
+    - F1: Settings menu (when implemented)
+    - Debug console: window.neonDrop
+    
+    Technical Features:
+    - 60 FPS fixed timestep game loop
+    - Deterministic gameplay (reproducible from seed)
+    - State validation and error recovery
+    - Configurable DAS/ARR for competitive play
+    -->
+</body>
+</html>
