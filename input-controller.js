@@ -1,14 +1,19 @@
 /**
- * input-controller.js - State-aware input handling with full touch support
+ * input-controller.js - Modern swipe-based input handling
  * 
  * Features:
- * - DAS (Delayed Auto Shift) for smooth piece movement
- * - ARR (Auto Repeat Rate) for continuous input
- * - State awareness - blocks invalid inputs based on game phase
- * - Professional input handling like modern Tetris games
- * - Full touch/mobile support with swipe and tap detection
+ * - Swipe-first mobile controls (no buttons!)
+ * - DAS/ARR for keyboard
+ * - Clean gesture detection
+ * - Works great with fat thumbs
  * 
- * UPDATED: Complete touch controls for mobile devices
+ * MODERN MOBILE CONTROLS:
+ * - Swipe left/right: Move
+ * - Swipe down: Soft drop
+ * - Tap: Rotate
+ * - Hold (long press): Hard drop
+ * - Swipe up: Float up (or rotate)
+ * - Two-finger tap: Hold piece
  */
 
 export class InputController {
@@ -36,12 +41,19 @@ export class InputController {
         // Track last successful move position to prevent ghosting
         this.lastValidPosition = null;
         
-        // Touch tracking
-        this.touchStartX = 0;
-        this.touchStartY = 0;
-        this.touchStartTime = 0;
-        this.isSwiping = false;
-        this.touchHoldTimer = null;
+        // Modern touch tracking
+        this.touches = new Map(); // Track multiple touches
+        this.gestureStartTime = 0;
+        this.gestureStartX = 0;
+        this.gestureStartY = 0;
+        this.isGesturing = false;
+        this.longPressTimer = null;
+        this.lastTapTime = 0;
+        
+        // Swipe thresholds
+        this.SWIPE_THRESHOLD = 30;
+        this.SWIPE_VELOCITY_THRESHOLD = 0.3; // pixels per ms
+        this.LONG_PRESS_DURATION = 400; // ms
         
         this.setupListeners();
     }
@@ -51,36 +63,14 @@ export class InputController {
         document.addEventListener('keydown', (e) => this.onKeyDown(e));
         document.addEventListener('keyup', (e) => this.onKeyUp(e));
         
-        // Touch listeners
-        document.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
-        document.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
-        document.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+        // Modern touch listeners
+        const gameCanvas = document.getElementById('game');
+        const touchTarget = gameCanvas || document;
         
-        // On-screen button listeners
-        const touchButtons = document.querySelectorAll('.touch-btn');
-        touchButtons.forEach(btn => {
-            // Use touchstart for immediate response
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                this.onTouchButtonPress(btn.dataset.action);
-            });
-            
-            btn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                this.onTouchButtonRelease(btn.dataset.action);
-            });
-            
-            // Also support mouse for debugging
-            btn.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                this.onTouchButtonPress(btn.dataset.action);
-            });
-            
-            btn.addEventListener('mouseup', (e) => {
-                e.preventDefault();
-                this.onTouchButtonRelease(btn.dataset.action);
-            });
-        });
+        touchTarget.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+        touchTarget.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+        touchTarget.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+        touchTarget.addEventListener('touchcancel', (e) => this.onTouchCancel(e), { passive: false });
         
         // Detect if device has touch
         if ('ontouchstart' in window) {
@@ -88,7 +78,7 @@ export class InputController {
         }
     }
     
-    // ============ KEYBOARD HANDLING ============
+    // ============ KEYBOARD HANDLING (unchanged) ============
     
     onKeyDown(e) {
         // Ignore held keys
@@ -163,71 +153,96 @@ export class InputController {
         return mapping[keyCode];
     }
     
-    // ============ TOUCH HANDLING ============
+    // ============ MODERN TOUCH HANDLING ============
     
     onTouchStart(e) {
-        // Prevent default to stop scrolling
         e.preventDefault();
+        const state = this.getState();
         
-        const touch = e.touches[0];
-        this.touchStartX = touch.clientX;
-        this.touchStartY = touch.clientY;
-        this.touchStartTime = Date.now();
-        this.isSwiping = false;
+        // Store all touches
+        for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            this.touches.set(touch.identifier, {
+                startX: touch.clientX,
+                startY: touch.clientY,
+                startTime: Date.now(),
+                currentX: touch.clientX,
+                currentY: touch.clientY
+            });
+        }
         
-        // Start hold timer for continuous down movement
-        this.touchHoldTimer = setTimeout(() => {
-            if (!this.isSwiping) {
-                this.startTouchHold();
+        // Handle based on number of fingers
+        if (e.touches.length === 1) {
+            // Single touch - track for gestures
+            const touch = e.touches[0];
+            this.gestureStartX = touch.clientX;
+            this.gestureStartY = touch.clientY;
+            this.gestureStartTime = Date.now();
+            this.isGesturing = false;
+            
+            // Check if we're in menu
+            if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
+                // Don't start long press timer in menu
+                return;
             }
-        }, 200);
+            
+            // Start long press timer for hard drop
+            this.longPressTimer = setTimeout(() => {
+                if (!this.isGesturing && this.touches.size === 1) {
+                    this.handleLongPress();
+                }
+            }, this.LONG_PRESS_DURATION);
+            
+        } else if (e.touches.length === 2) {
+            // Two fingers - immediate hold action
+            clearTimeout(this.longPressTimer);
+            this.handleTwoFingerTap();
+        }
     }
     
     onTouchMove(e) {
         e.preventDefault();
         
-        if (!this.touchStartX || !this.touchStartY) return;
+        if (this.touches.size === 0) return;
         
-        const touch = e.touches[0];
-        const deltaX = touch.clientX - this.touchStartX;
-        const deltaY = touch.clientY - this.touchStartY;
-        
-        // Detect if this is a swipe
-        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-            this.isSwiping = true;
-            clearTimeout(this.touchHoldTimer);
-        }
-        
-        // Threshold for swipe detection
-        const threshold = 30;
-        
-        // Horizontal swipe for movement
-        if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > Math.abs(deltaY)) {
-            const action = { type: 'MOVE', dx: deltaX > 0 ? 1 : -1, dy: 0 };
-            if (this.isActionAllowed(action)) {
-                this.onAction(action);
-                // Reset start position for continuous swiping
-                this.touchStartX = touch.clientX;
+        // Update touch positions
+        for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            const tracked = this.touches.get(touch.identifier);
+            if (tracked) {
+                tracked.currentX = touch.clientX;
+                tracked.currentY = touch.clientY;
             }
         }
         
-        // Vertical swipe
-        if (Math.abs(deltaY) > threshold && Math.abs(deltaY) > Math.abs(deltaX)) {
-            if (deltaY > 0) {
-                // Swipe down - soft drop
-                const action = { type: 'MOVE', dx: 0, dy: 1 };
-                if (this.isActionAllowed(action)) {
-                    this.onAction(action);
-                    this.touchStartY = touch.clientY;
-                }
-            } else {
-                // Swipe up - rotate
-                const action = { type: 'ROTATE', direction: 1 };
-                if (this.isActionAllowed(action)) {
-                    this.onAction(action);
-                    this.touchStartY = touch.clientY;
-                    this.touchStartX = touch.clientX;
-                }
+        // Only process single touch gestures
+        if (e.touches.length !== 1) return;
+        
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - this.gestureStartX;
+        const deltaY = touch.clientY - this.gestureStartY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        // If we've moved enough, it's a gesture
+        if (distance > 10) {
+            this.isGesturing = true;
+            clearTimeout(this.longPressTimer);
+        }
+        
+        // Process swipes with better thresholds
+        if (distance > this.SWIPE_THRESHOLD) {
+            const absX = Math.abs(deltaX);
+            const absY = Math.abs(deltaY);
+            
+            // Determine swipe direction
+            if (absX > absY * 1.5) {
+                // Horizontal swipe (more lenient)
+                this.handleSwipe(deltaX > 0 ? 'right' : 'left');
+                this.gestureStartX = touch.clientX; // Reset for continuous swipes
+            } else if (absY > absX * 1.5) {
+                // Vertical swipe (more strict)
+                this.handleSwipe(deltaY > 0 ? 'down' : 'up');
+                this.gestureStartY = touch.clientY; // Reset for continuous swipes
             }
         }
     }
@@ -235,66 +250,70 @@ export class InputController {
     onTouchEnd(e) {
         e.preventDefault();
         
-        clearTimeout(this.touchHoldTimer);
-        this.stopTouchHold();
+        // Clear long press timer
+        clearTimeout(this.longPressTimer);
         
-        const touchDuration = Date.now() - this.touchStartTime;
+        // Get the ended touch
+        const endedTouches = [];
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            const tracked = this.touches.get(touch.identifier);
+            if (tracked) {
+                endedTouches.push({
+                    ...tracked,
+                    endX: touch.clientX,
+                    endY: touch.clientY,
+                    endTime: Date.now()
+                });
+                this.touches.delete(touch.identifier);
+            }
+        }
+        
+        // If all touches ended and we have exactly one touch
+        if (this.touches.size === 0 && endedTouches.length === 1) {
+            const touch = endedTouches[0];
+            const duration = touch.endTime - touch.startTime;
+            const distance = Math.sqrt(
+                Math.pow(touch.endX - touch.startX, 2) + 
+                Math.pow(touch.endY - touch.startY, 2)
+            );
+            
+            const state = this.getState();
+            
+            // Check if we're in menu - any tap starts game
+            if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
+                this.onAction({ type: 'START_GAME' });
+                return;
+            }
+            
+            // Quick tap with minimal movement = rotate
+            if (duration < 200 && distance < 10) {
+                this.handleTap();
+            }
+        }
+        
+        // Reset gesture tracking when all touches end
+        if (this.touches.size === 0) {
+            this.isGesturing = false;
+        }
+    }
+    
+    onTouchCancel(e) {
+        // Clear all touch tracking
+        clearTimeout(this.longPressTimer);
+        this.touches.clear();
+        this.isGesturing = false;
+    }
+    
+    // ============ GESTURE HANDLERS ============
+    
+    handleSwipe(direction) {
         const state = this.getState();
+        if (!state.current) return;
         
-        // Check if we're in menu or game over - ANY tap should start
-        if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
-            this.onAction({ type: 'START_GAME' });
-            return;
-        }
-        
-        // Quick tap for rotate
-        if (!this.isSwiping && touchDuration < 200) {
-            const action = { type: 'ROTATE', direction: 1 };
-            if (this.isActionAllowed(action)) {
-                this.onAction(action);
-            }
-        }
-        
-        // Double tap detection for hard drop
-        if (!this.isSwiping && this.lastTapTime && (Date.now() - this.lastTapTime) < 300) {
-            const action = { type: 'HARD_DROP' };
-            if (this.isActionAllowed(action)) {
-                this.onAction(action);
-            }
-            this.lastTapTime = null;
-        } else {
-            this.lastTapTime = Date.now();
-        }
-        
-        // Reset touch tracking
-        this.touchStartX = 0;
-        this.touchStartY = 0;
-        this.isSwiping = false;
-    }
-    
-    // Touch hold for continuous down movement
-    startTouchHold() {
-        this.touchHoldInterval = setInterval(() => {
-            const action = { type: 'MOVE', dx: 0, dy: 1 };
-            if (this.isActionAllowed(action)) {
-                this.onAction(action);
-            }
-        }, 50);
-    }
-    
-    stopTouchHold() {
-        if (this.touchHoldInterval) {
-            clearInterval(this.touchHoldInterval);
-            this.touchHoldInterval = null;
-        }
-    }
-    
-    // ============ ON-SCREEN BUTTON HANDLING ============
-    
-    onTouchButtonPress(actionType) {
         let action = null;
         
-        switch (actionType) {
+        switch (direction) {
             case 'left':
                 action = { type: 'MOVE', dx: -1, dy: 0 };
                 break;
@@ -304,65 +323,39 @@ export class InputController {
             case 'down':
                 action = { type: 'MOVE', dx: 0, dy: 1 };
                 break;
-            case 'rotate':
-                action = { type: 'ROTATE', direction: 1 };
-                break;
-            case 'drop':
-                action = { type: 'HARD_DROP' };
-                break;
-            case 'hold':
-                action = { type: 'HOLD' };
+            case 'up':
+                // Smart up handling
+                if (state.current.type === 'FLOAT') {
+                    action = { type: 'UP_PRESSED' }; // Let game engine handle FLOAT logic
+                } else {
+                    action = { type: 'ROTATE', direction: 1 };
+                }
                 break;
         }
         
         if (action && this.isActionAllowed(action)) {
             this.onAction(action);
-            
-            // Start auto-repeat for movement buttons
-            if (action.type === 'MOVE') {
-                this.startButtonRepeat(actionType, action);
-            }
         }
     }
     
-    onTouchButtonRelease(actionType) {
-        this.stopButtonRepeat(actionType);
-    }
-    
-    startButtonRepeat(buttonType, action) {
-        // Similar to keyboard auto-repeat
-        const repeatKey = `btn-${buttonType}`;
-        
-        // DAS: Wait before starting repeat
-        const dasTimer = setTimeout(() => {
-            // ARR: Repeat at fixed rate
-            const arrTimer = setInterval(() => {
-                if (this.isActionAllowed(action)) {
-                    this.onAction(action);
-                }
-            }, this.ARR_RATE);
-            
-            this.arr.set(repeatKey, arrTimer);
-        }, this.DAS_DELAY);
-        
-        this.das.set(repeatKey, dasTimer);
-    }
-    
-    stopButtonRepeat(buttonType) {
-        const repeatKey = `btn-${buttonType}`;
-        
-        // Clear DAS timer
-        const dasTimer = this.das.get(repeatKey);
-        if (dasTimer) {
-            clearTimeout(dasTimer);
-            this.das.delete(repeatKey);
+    handleTap() {
+        const action = { type: 'ROTATE', direction: 1 };
+        if (this.isActionAllowed(action)) {
+            this.onAction(action);
         }
-        
-        // Clear ARR timer
-        const arrTimer = this.arr.get(repeatKey);
-        if (arrTimer) {
-            clearInterval(arrTimer);
-            this.arr.delete(repeatKey);
+    }
+    
+    handleLongPress() {
+        const action = { type: 'HARD_DROP' };
+        if (this.isActionAllowed(action)) {
+            this.onAction(action);
+        }
+    }
+    
+    handleTwoFingerTap() {
+        const action = { type: 'HOLD' };
+        if (this.isActionAllowed(action)) {
+            this.onAction(action);
         }
     }
     
@@ -374,7 +367,7 @@ export class InputController {
         // Menu/Game Over - allow start actions
         if (state.phase === 'MENU' || state.phase === 'GAME_OVER') {
             return action.type === 'SPACE' || action.type === 'ENTER' || action.type === 'ESCAPE' ||
-                   action.type === 'START_GAME'; // Added START_GAME
+                   action.type === 'START_GAME';
         }
         
         // Paused - only allow unpause
@@ -477,9 +470,13 @@ export class InputController {
         // Remove event listeners
         document.removeEventListener('keydown', this.onKeyDown);
         document.removeEventListener('keyup', this.onKeyUp);
-        document.removeEventListener('touchstart', this.onTouchStart);
-        document.removeEventListener('touchmove', this.onTouchMove);
-        document.removeEventListener('touchend', this.onTouchEnd);
+        
+        const gameCanvas = document.getElementById('game');
+        const touchTarget = gameCanvas || document;
+        touchTarget.removeEventListener('touchstart', this.onTouchStart);
+        touchTarget.removeEventListener('touchmove', this.onTouchMove);
+        touchTarget.removeEventListener('touchend', this.onTouchEnd);
+        touchTarget.removeEventListener('touchcancel', this.onTouchCancel);
         
         // Clear all timers
         this.das.forEach(timer => clearTimeout(timer));
@@ -490,7 +487,6 @@ export class InputController {
         this.keys.clear();
         
         // Clear touch timers
-        clearTimeout(this.touchHoldTimer);
-        clearInterval(this.touchHoldInterval);
+        clearTimeout(this.longPressTimer);
     }
 }
