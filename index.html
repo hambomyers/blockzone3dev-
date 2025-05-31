@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="Neon Drop - A competitive Tetris game">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Neon Drop</title>
     
     <!-- Styles -->
@@ -21,6 +23,24 @@
     
     <!-- UI Container for future settings/menus -->
     <div id="ui-container"></div>
+    
+    <!-- Touch Controls (visible only on touch devices) -->
+    <div id="touch-controls">
+        <div class="touch-left">
+            <button class="touch-btn" data-action="left">◀</button>
+        </div>
+        <div class="touch-center">
+            <button class="touch-btn" data-action="down">▼</button>
+            <button class="touch-btn" data-action="rotate">↻</button>
+        </div>
+        <div class="touch-right">
+            <button class="touch-btn" data-action="right">▶</button>
+        </div>
+        <div class="touch-bottom">
+            <button class="touch-btn" data-action="drop">⬇⬇</button>
+            <button class="touch-btn" data-action="hold">HOLD</button>
+        </div>
+    </div>
     
     <!-- 
     ===== BLOCKCHAIN INTEGRATION (TEMPORARILY DISABLED) =====
@@ -58,13 +78,21 @@
     - Smooth animations and particle effects
     - Professional scoring system
     
-    Controls:
+    Desktop Controls:
     - Arrow Keys / WASD: Move pieces
     - Z/X or Shift/Ctrl: Rotate
     - Space: Hard drop (instant drop)
     - C or Right Shift: Hold piece
     - P or ESC: Pause
     - Enter/Space: Start game
+    
+    Mobile Controls:
+    - Swipe left/right: Move piece
+    - Swipe down: Soft drop
+    - Swipe up: Rotate
+    - Tap: Rotate
+    - Double tap: Hard drop
+    - On-screen buttons for all actions
     
     Secret Features:
     - Hold S+T+A+R on menu: Enable starfield background
@@ -76,6 +104,7 @@
     - Deterministic gameplay (reproducible from seed)
     - State validation and error recovery
     - Configurable DAS/ARR for competitive play
+    - Responsive design for all screen sizes
     -->
 </body>
 </html>
