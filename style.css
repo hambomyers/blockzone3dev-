@@ -1,6 +1,7 @@
 /**
- * style.css - Professional game styling
+ * style.css - Professional game styling with mobile support
  * Clean, maintainable CSS with proper organization
+ * UPDATED: Full responsive design and touch controls
  */
 
 /* ============ RESET & BASE ============ */
@@ -26,6 +27,14 @@ body {
     position: relative;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    
+    /* Prevent mobile browser behaviors */
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
 }
 
 /* ============ CANVAS ============ */
@@ -46,6 +55,8 @@ body {
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
     display: block;
+    max-width: 100vw;
+    max-height: 100vh;
 }
 
 /* ============ UI CONTAINER ============ */
@@ -61,6 +72,70 @@ body {
 
 #ui-container > * {
     pointer-events: auto;
+}
+
+/* ============ TOUCH CONTROLS ============ */
+#touch-controls {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    display: none;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+/* Show touch controls only on touch devices */
+body.touch-device #touch-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.touch-left,
+.touch-center,
+.touch-right {
+    display: flex;
+    gap: 10px;
+}
+
+.touch-bottom {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 10px;
+}
+
+.touch-btn {
+    background: rgba(138, 43, 226, 0.8);
+    border: 2px solid #8A2BE2;
+    color: #fff;
+    font-size: 24px;
+    font-weight: bold;
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.1s;
+}
+
+.touch-btn:active {
+    background: rgba(155, 48, 255, 0.9);
+    transform: scale(0.95);
+}
+
+/* Larger buttons for drop and hold */
+.touch-bottom .touch-btn {
+    width: 100px;
+    height: 50px;
+    font-size: 16px;
 }
 
 /* ============ ERROR MESSAGE ============ */
@@ -305,7 +380,7 @@ body {
     100% { opacity: 0.8; }
 }
 
-/* ============ RESPONSIVE ============ */
+/* ============ MOBILE RESPONSIVE ============ */
 @media (max-width: 768px) {
     .settings-button {
         top: 10px;
@@ -325,6 +400,62 @@ body {
         width: 90%;
         min-width: auto;
         padding: 20px;
+    }
+    
+    /* Adjust touch controls for smaller screens */
+    .touch-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+    
+    .touch-bottom .touch-btn {
+        width: 80px;
+        height: 45px;
+        font-size: 14px;
+    }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+    #touch-controls {
+        padding: 5px;
+    }
+    
+    .touch-btn {
+        width: 45px;
+        height: 45px;
+        font-size: 18px;
+    }
+    
+    .touch-bottom .touch-btn {
+        width: 70px;
+        height: 40px;
+        font-size: 12px;
+    }
+}
+
+/* Landscape orientation */
+@media (orientation: landscape) and (max-height: 600px) {
+    #touch-controls {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 5px;
+    }
+    
+    .touch-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+    
+    .touch-bottom {
+        margin-top: 5px;
+    }
+    
+    .touch-bottom .touch-btn {
+        width: 60px;
+        height: 35px;
+        font-size: 11px;
     }
 }
 
@@ -393,4 +524,9 @@ input:focus {
     stroke: rgba(255, 255, 255, 0.1);
     stroke-width: 1;
     fill: none;
+}
+
+/* ============ PREVENT PULL-TO-REFRESH ============ */
+body {
+    overscroll-behavior-y: none;
 }
